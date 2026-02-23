@@ -96,22 +96,17 @@ All frameworks use an equivalent log pattern:
 
 ## Results Visualization
 
-A static HTML dashboard is included in [`docs/index.html`](docs/index.html) for visualizing JMH results.
+📊 **Live dashboard:** [brunoborges.github.io/java-logging-benchmark](https://brunoborges.github.io/java-logging-benchmark/)
 
-**To use it:**
+The dashboard auto-loads the latest CI benchmark results from Linux, macOS, and Windows with tabbed comparison views.
 
-1. Run the benchmark with JSON output:
-   ```bash
-   java -jar target/benchmarks.jar -rf json -rff results.json
-   ```
-2. Open `docs/index.html` in a browser
-3. Drag & drop your `results.json` file(s) onto the page
+You can also run benchmarks locally and drag & drop your own `results.json` files onto the page:
 
-Name files with the OS (e.g. `results-linux.json`, `results-macos.json`, `results-windows.json`) to get tabbed per-OS comparison views.
+```bash
+java -jar target/benchmarks.jar -rf json -rff results.json
+```
 
-A sample results file is included at `docs/sample-results.json`.
-
-> **Tip:** Enable GitHub Pages on the `docs/` folder to host the dashboard at `https://<user>.github.io/<repo>/`.
+Name files with the OS (e.g. `results-linux.json`, `results-macos.json`, `results-windows.json`) to get per-OS tabs.
 
 ## CI / Cross-Platform Benchmarks
 

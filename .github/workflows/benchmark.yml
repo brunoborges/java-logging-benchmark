@@ -1,21 +1,14 @@
-name: Logging Benchmark
+name: Build
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  benchmark:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    name: Benchmark (${{ matrix.os }})
-
+  build:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +21,5 @@ jobs:
       - name: Build benchmark jar
         run: mvn clean package -q
 
-      - name: Run benchmarks
-        run: java -jar target/benchmarks.jar -rf json -rff results.json -f 2 -wi 5 -i 10
-
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results-${{ matrix.os }}
-          path: results.json
+      - name: Smoke test
+        run: java -jar target/benchmarks.jar -l

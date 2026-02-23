@@ -154,6 +154,13 @@
 
     <script>
     (() => {
+        // Auto-load result files when hosted (e.g., GitHub Pages)
+        const AUTO_LOAD_FILES = [
+            'results-ubuntu-latest.json',
+            'results-macos-latest.json',
+            'results-windows-latest.json'
+        ];
+
         const FRAMEWORK_COLORS = {
             Log4j2: { bg: 'rgba(255,107,107,0.75)', border: '#ff6b6b' },
             Logback: { bg: 'rgba(78,205,196,0.75)', border: '#4ecdc4' },
@@ -404,6 +411,18 @@
             if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + 'K';
             return n.toFixed(2);
         }
+
+        // Auto-load results when hosted alongside JSON files
+        Promise.allSettled(AUTO_LOAD_FILES.map(f =>
+            fetch(f).then(r => { if (!r.ok) throw new Error(r.status); return r.json().then(data => ({ name: f, data })); })
+        )).then(results => {
+            const loaded = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+            if (loaded.length === 0) return;
+            for (const { name, data } of loaded) {
+                datasets[guessOS(name)] = data;
+            }
+            updateUI();
+        });
     })();
     </script>
 </body>

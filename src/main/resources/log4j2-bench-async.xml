@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="ERROR" name="BenchmarkAsync">
+    <Appenders>
+        <RandomAccessFile name="File"
+                          fileName="${sys:benchmark.logFile:-/tmp/log4j2-async-bench.log}"
+                          immediateFlush="false">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </RandomAccessFile>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="File"/>
+        </Root>
+    </Loggers>
+</Configuration>

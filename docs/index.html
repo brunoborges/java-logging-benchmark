@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java Logging Benchmark Results</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --log4j2: #ff6b6b;
+            --logback: #4ecdc4;
+            --jul: #ffe66d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+        .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+        .subtitle a { color: var(--accent); text-decoration: none; }
+        .subtitle a:hover { text-decoration: underline; }
+
+        /* File input */
+        .upload-section {
+            background: var(--surface);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: border-color 0.2s;
+        }
+        .upload-section:hover, .upload-section.dragover {
+            border-color: var(--accent);
+        }
+        .upload-section p { color: var(--muted); margin-bottom: 1rem; }
+        .upload-section input[type="file"] { display: none; }
+        .upload-section label {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--bg);
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .upload-section label:hover { opacity: 0.9; }
+        .file-list { color: var(--muted); margin-top: 0.75rem; font-size: 0.85rem; }
+
+        /* OS tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .tab {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .tab:hover { color: var(--text); border-color: var(--muted); }
+        .tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+        /* Charts grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .chart-card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        .chart-container { position: relative; width: 100%; min-height: 350px; }
+
+        /* Summary table */
+        .summary { margin-top: 2rem; }
+        .summary h2 { font-size: 1.2rem; margin-bottom: 1rem; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        tr:hover td { background: rgba(88,166,255,0.05); }
+        .fw-log4j2 { color: var(--log4j2); }
+        .fw-logback { color: var(--logback); }
+        .fw-jul { color: var(--jul); }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 1rem;
+            color: var(--muted);
+        }
+        .empty-state code {
+            background: var(--surface);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        @media (min-width: 900px) {
+            .charts-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h1>☕ Java Logging Benchmark</h1>
+    <p class="subtitle">
+        JMH throughput comparison of Log4j2 2.25.3, Logback 1.5.32 &amp; JUL on Java 25 &mdash;
+        <a href="https://www.sitepoint.com/which-java-logging-framework-has-the-best-performance/">inspired by SitePoint</a>
+    </p>
+
+    <div class="upload-section" id="dropZone">
+        <p>Drop one or more JMH JSON result files here, or click to select.<br>
+           Name files like <code>results-ubuntu.json</code>, <code>results-macos.json</code>, <code>results-windows.json</code> for OS tabs.</p>
+        <label for="fileInput">Choose files</label>
+        <input type="file" id="fileInput" accept=".json" multiple>
+        <div class="file-list" id="fileList"></div>
+    </div>
+
+    <div id="content" class="empty-state">
+        <p>No data loaded yet.</p>
+        <p>Generate results with: <code>java -jar benchmarks.jar -rf json -rff results.json</code></p>
+    </div>
+
+    <script>
+    (() => {
+        const FRAMEWORK_COLORS = {
+            Log4j2: { bg: 'rgba(255,107,107,0.75)', border: '#ff6b6b' },
+            Logback: { bg: 'rgba(78,205,196,0.75)', border: '#4ecdc4' },
+            JUL:     { bg: 'rgba(255,230,109,0.75)', border: '#ffe66d' },
+        };
+
+        const datasets = {};      // osName -> jmh json array
+        const charts = [];
+        let activeOS = null;
+
+        // ── File handling ──────────────────────────────────────────────
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+        function handleFiles(files) {
+            for (const f of files) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const data = JSON.parse(reader.result);
+                        const osName = guessOS(f.name);
+                        datasets[osName] = data;
+                        updateUI();
+                    } catch (err) {
+                        alert(`Error parsing ${f.name}: ${err.message}`);
+                    }
+                };
+                reader.readAsText(f);
+            }
+        }
+
+        function guessOS(filename) {
+            const lower = filename.toLowerCase();
+            if (lower.includes('ubuntu') || lower.includes('linux')) return 'Linux';
+            if (lower.includes('macos') || lower.includes('mac') || lower.includes('darwin')) return 'macOS';
+            if (lower.includes('windows') || lower.includes('win')) return 'Windows';
+            return filename.replace(/\.json$/i, '');
+        }
+
+        // ── UI rendering ───────────────────────────────────────────────
+        function updateUI() {
+            const osNames = Object.keys(datasets).sort();
+            document.getElementById('fileList').textContent = `Loaded: ${osNames.join(', ')}`;
+            if (!activeOS || !datasets[activeOS]) activeOS = osNames[0];
+            renderAll();
+        }
+
+        function renderAll() {
+            const osNames = Object.keys(datasets).sort();
+            const content = document.getElementById('content');
+            content.className = '';
+            content.innerHTML = '';
+
+            // Tabs
+            if (osNames.length > 1) {
+                const tabs = document.createElement('div');
+                tabs.className = 'tabs';
+                for (const os of osNames) {
+                    const btn = document.createElement('button');
+                    btn.className = 'tab' + (os === activeOS ? ' active' : '');
+                    btn.textContent = os;
+                    btn.onclick = () => { activeOS = os; renderAll(); };
+                    tabs.appendChild(btn);
+                }
+                content.appendChild(tabs);
+            }
+
+            const data = datasets[activeOS];
+            const grouped = groupBenchmarks(data);
+
+            // Charts
+            const grid = document.createElement('div');
+            grid.className = 'charts-grid';
+            charts.forEach(c => c.destroy());
+            charts.length = 0;
+
+            for (const [category, benchmarks] of Object.entries(grouped)) {
+                const card = document.createElement('div');
+                card.className = 'chart-card';
+                card.innerHTML = `<h2>${category}</h2><div class="chart-container"><canvas></canvas></div>`;
+                grid.appendChild(card);
+                content.appendChild(grid);
+
+                const canvas = card.querySelector('canvas');
+                charts.push(createChart(canvas, benchmarks, category));
+            }
+
+            // Summary table
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            summary.innerHTML = `<h2>Full Results — ${activeOS}</h2>`;
+            summary.appendChild(createTable(data));
+            content.appendChild(summary);
+        }
+
+        // ── Data helpers ───────────────────────────────────────────────
+        function parseBenchmark(entry) {
+            const fullName = entry.benchmark;
+            const parts = fullName.split('.');
+            const method = parts[parts.length - 1];
+            const className = parts[parts.length - 2];
+
+            let framework = 'Unknown';
+            if (className.includes('Log4j2')) framework = 'Log4j2';
+            else if (className.includes('Logback')) framework = 'Logback';
+            else if (className.includes('JUL')) framework = 'JUL';
+
+            const isAsync = method.startsWith('async');
+            const scenario = method.replace(/^(sync|async)/, '');
+
+            return { framework, method, scenario, isAsync, score: entry.primaryMetric.score, error: entry.primaryMetric.scoreError, unit: entry.primaryMetric.scoreUnit };
+        }
+
+        function groupBenchmarks(data) {
+            const groups = {};
+            for (const entry of data) {
+                const b = parseBenchmark(entry);
+                const category = b.isAsync ? `Async — ${b.scenario}` : `Sync — ${b.scenario}`;
+                if (!groups[category]) groups[category] = [];
+                groups[category].push(b);
+            }
+            // Sort categories: Sync first, then Async
+            const sorted = {};
+            for (const key of Object.keys(groups).sort((a, b) => {
+                const aSync = a.startsWith('Sync') ? 0 : 1;
+                const bSync = b.startsWith('Sync') ? 0 : 1;
+                return aSync - bSync || a.localeCompare(b);
+            })) {
+                sorted[key] = groups[key];
+            }
+            return sorted;
+        }
+
+        // ── Chart ──────────────────────────────────────────────────────
+        function createChart(canvas, benchmarks, title) {
+            benchmarks.sort((a, b) => b.score - a.score);
+            const labels = benchmarks.map(b => b.framework);
+            const scores = benchmarks.map(b => b.score);
+            const errors = benchmarks.map(b => b.error);
+            const bgColors = benchmarks.map(b => (FRAMEWORK_COLORS[b.framework] || { bg: '#888' }).bg);
+            const borderColors = benchmarks.map(b => (FRAMEWORK_COLORS[b.framework] || { border: '#aaa' }).border);
+            const unit = benchmarks[0]?.unit || 'ops/s';
+
+            return new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: scores,
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        errorBars: errors,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const err = errors[ctx.dataIndex];
+                                    return `${formatNumber(ctx.raw)} ± ${formatNumber(err)} ${unit}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: { display: true, text: unit, color: '#8b949e' },
+                            ticks: { color: '#8b949e', callback: v => formatNumber(v) },
+                            grid: { color: 'rgba(48,54,61,0.6)' },
+                        },
+                        y: {
+                            ticks: { color: '#e6edf3', font: { weight: 'bold', size: 13 } },
+                            grid: { display: false },
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'errorBars',
+                    afterDraw(chart) {
+                        const meta = chart.getDatasetMeta(0);
+                        const ctx = chart.ctx;
+                        const xScale = chart.scales.x;
+                        meta.data.forEach((bar, i) => {
+                            const err = errors[i];
+                            if (!err) return;
+                            const score = scores[i];
+                            const xMin = xScale.getPixelForValue(score - err);
+                            const xMax = xScale.getPixelForValue(score + err);
+                            const y = bar.y;
+                            ctx.save();
+                            ctx.strokeStyle = '#e6edf3';
+                            ctx.lineWidth = 1.5;
+                            ctx.beginPath();
+                            ctx.moveTo(xMin, y);
+                            ctx.lineTo(xMax, y);
+                            ctx.moveTo(xMin, y - 5);
+                            ctx.lineTo(xMin, y + 5);
+                            ctx.moveTo(xMax, y - 5);
+                            ctx.lineTo(xMax, y + 5);
+                            ctx.stroke();
+                            ctx.restore();
+                        });
+                    }
+                }]
+            });
+        }
+
+        // ── Table ──────────────────────────────────────────────────────
+        function createTable(data) {
+            const table = document.createElement('table');
+            table.innerHTML = `<thead><tr>
+                <th>Framework</th><th>Benchmark</th><th style="text-align:right">Score</th>
+                <th style="text-align:right">Error (±)</th><th>Unit</th>
+            </tr></thead>`;
+            const tbody = document.createElement('tbody');
+            const parsed = data.map(parseBenchmark).sort((a, b) => b.score - a.score);
+            for (const b of parsed) {
+                const fwClass = `fw-${b.framework.toLowerCase()}`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="${fwClass}">${b.framework}</td>
+                    <td>${b.isAsync ? 'async' : 'sync'}${b.scenario}</td>
+                    <td class="num">${formatNumber(b.score)}</td>
+                    <td class="num">${formatNumber(b.error)}</td>
+                    <td>${b.unit}</td>`;
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            return table;
+        }
+
+        function formatNumber(n) {
+            if (n == null) return '—';
+            if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+            if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+            return n.toFixed(2);
+        }
+    })();
+    </script>
+</body>
+</html>
